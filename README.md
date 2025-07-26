@@ -172,3 +172,77 @@ steps:
 
 By placing the test step early in your cloudbuild.yaml , you create a "fail-fast" mechanism: if tests fail, the build stops immediately, preventing a broken image from being built or deployed.
 python -m pytest tests
+
+### Generate Cloud build yaml file
+# cloudbuild.yaml
+
+steps:
+  # 1. Run Unit Tests
+  - name: 'python:3.9-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install Flask pytest pytest-flask
+        pytest
+    id: 'Run Unit Tests'
+
+  # 2. Build the Docker Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/cs-poc-lhsovao7bcucdrmgyhgjrvg/cloud-run-source-deploy/flask-app:${SHORT_SHA}'
+      - '.'
+    id: 'Build Docker Image'
+
+  # 3. Push the Docker Image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/cs-poc-lhsovao7bcucdrmgyhgjrvg/cloud-run-source-deploy/flask-app:${SHORT_SHA}'
+    id: 'Push Docker Image'
+
+  # 4. Deploy to Cloud Run
+  - name: 'gcr.io/google-cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'flask-app'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/cs-poc-lhsovao7bcucdrmgyhgjrvg/cloud-run-source-deploy/flask-app:${SHORT_SHA}'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+    id: 'Deploy to Cloud Run'
+
+# Define the Artifact Registry repository
+images:
+  - 'us-central1-docker.pkg.dev/cs-poc-lhsovao7bcucdrmgyhgjrvg/cloud-run-source-deploy/flask-app:${SHORT_SHA}'
+
+# Substitutions
+substitutions:
+    _SERVICE_NAME: flask-app
+
+options:
+  substitution_option: 'ALLOW_LOOSE'
+
+#########
+
+Key points:
+
+steps : This section defines the sequence of operations Cloud Build will perform.
+Run Unit Tests : This step installs Flask, pytest, and pytest-flask, then runs the unit tests using pytest . It uses a standard python image.
+Build Docker Image : This step uses the docker build command to create a Docker image from your application code and Dockerfile. It tags the image with the commit SHA for versioning.
+Push Docker Image : This step pushes the built Docker image to Artifact Registry. Make sure to replace the registry path with your actual Artifact Registry path.
+Deploy to Cloud Run : This step uses the gcloud run deploy command to deploy the Docker image to Cloud Run. It specifies the service name, image, region, platform (managed), and allows unauthenticated access (if needed). Replace flask-app with your desired service name and us-central1 with your desired region.
+images : This section defines the images that Cloud Build will push to Artifact Registry.
+substitutions : This section defines any substitutions that will be used in the build process. In this case, it defines a substitution for the service name.
+Important : Replace us-central1-docker.pkg.dev/cs-poc-lhsovao7bcucdrmgyhgjrvg/cloud-run-source-deploy/flask-app with your Artifact Registry path. Also, replace flask-app with your desired Cloud Run service name.
+--allow-unauthenticated : This flag makes your Cloud Run service publicly accessible. Remove it if you require authentication.
+options: substitution_option: 'ALLOW_LOOSE' : This allows you to define substitutions that may not be used in every build.
+
+####

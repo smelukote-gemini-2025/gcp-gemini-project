@@ -1,0 +1,55 @@
+# cloudbuild.yaml
+
+steps:
+  # 1. Run Unit Tests
+  - name: 'python:3.9-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install Flask pytest pytest-flask
+        pytest
+    id: 'Run Unit Tests'
+
+  # 2. Build the Docker Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/cs-poc-lhsovao7bcucdrmgyhgjrvg/cloud-run-source-deploy/flask-app:${SHORT_SHA}'
+      - '.'
+    id: 'Build Docker Image'
+
+  # 3. Push the Docker Image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/cs-poc-lhsovao7bcucdrmgyhgjrvg/cloud-run-source-deploy/flask-app:${SHORT_SHA}'
+    id: 'Push Docker Image'
+
+  # 4. Deploy to Cloud Run
+  - name: 'gcr.io/google-cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'flask-app'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/cs-poc-lhsovao7bcucdrmgyhgjrvg/cloud-run-source-deploy/flask-app:${SHORT_SHA}'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+    id: 'Deploy to Cloud Run'
+
+# Define the Artifact Registry repository
+images:
+  - 'us-central1-docker.pkg.dev/cs-poc-lhsovao7bcucdrmgyhgjrvg/cloud-run-source-deploy/flask-app:${SHORT_SHA}'
+
+# Substitutions
+substitutions:
+    _SERVICE_NAME: flask-app
+
+options:
+  substitution_option: 'ALLOW_LOOSE'
